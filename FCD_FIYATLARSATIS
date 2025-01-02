@@ -1,0 +1,196 @@
+WITH ItemsAndLogicalrefCTE AS (
+    SELECT DISTINCT
+        IT.LOGICALREF,
+        IT.CODE as ORIGINAL_CODE,
+        CASE WHEN IT.CODE LIKE '\%' THEN SUBSTRING(IT.CODE, 2, LEN(IT.CODE) - 1) ELSE IT.CODE END AS CLEAN_CODE,
+        IT.NAME,
+        IT.SPECODE3
+    FROM dbo.LG_124_ITEMS IT WITH (NOLOCK)
+    WHERE IT.CARDTYPE = 12
+),
+StockMovementsCTE AS (
+    SELECT 
+        ST.*,
+        i.CLEAN_CODE,
+        i.NAME,
+        i.SPECODE3
+    FROM (
+        SELECT 
+            ST.STOCKREF, 
+            ST.DATE_, 
+            ST.VATMATRAH, 
+            ST.AMOUNT, 
+            ST.INVOICEREF,
+            YEAR(ST.DATE_) AS YEAR_,
+            MONTH(ST.DATE_) AS MONTH_
+        FROM dbo.LG_124_01_STLINE ST WITH (NOLOCK)
+        WHERE YEAR(ST.DATE_) = 2024
+        AND EXISTS (
+            SELECT 1 
+            FROM dbo.LG_124_01_INVOICE IV WITH (NOLOCK)
+            WHERE ST.INVOICEREF = IV.LOGICALREF
+            AND IV.TRCODE = 8 
+            AND IV.GRPCODE = 2
+        )
+        
+        UNION ALL
+        
+        SELECT 
+            ST.STOCKREF, 
+            ST.DATE_, 
+            ST.VATMATRAH, 
+            ST.AMOUNT, 
+            ST.INVOICEREF,
+            YEAR(ST.DATE_) AS YEAR_,
+            MONTH(ST.DATE_) AS MONTH_
+        FROM dbo.LG_122_01_STLINE ST WITH (NOLOCK)
+        WHERE YEAR(ST.DATE_) = 2023
+        AND EXISTS (
+            SELECT 1 
+            FROM dbo.LG_122_01_INVOICE IV WITH (NOLOCK)
+            WHERE ST.INVOICEREF = IV.LOGICALREF
+            AND IV.TRCODE = 8 
+            AND IV.GRPCODE = 2
+        )
+        
+        UNION ALL
+        
+        SELECT 
+            ST.STOCKREF, 
+            ST.DATE_, 
+            ST.VATMATRAH, 
+            ST.AMOUNT, 
+            ST.INVOICEREF,
+            YEAR(ST.DATE_) AS YEAR_,
+            MONTH(ST.DATE_) AS MONTH_
+        FROM dbo.LG_122_01_STLINE ST WITH (NOLOCK)
+        WHERE YEAR(ST.DATE_) = 2022
+        AND EXISTS (
+            SELECT 1 
+            FROM dbo.LG_122_01_INVOICE IV WITH (NOLOCK)
+            WHERE ST.INVOICEREF = IV.LOGICALREF
+            AND IV.TRCODE = 8 
+            AND IV.GRPCODE = 2
+        )
+    ) AS ST
+    INNER JOIN ItemsAndLogicalrefCTE i ON ST.STOCKREF = i.LOGICALREF
+),
+BaseSalesCTE AS (
+    -- BaseSalesCTE'de TRCODE ve GRPCODE kolonlarını kaldıralım çünkü artık filtreleme önceden yapıldı
+    SELECT 
+        sm.CLEAN_CODE,
+        sm.NAME,
+        sm.SPECODE3,
+        sp.DEFINITION_ as SPECODE_DESC,
+        sm.YEAR_,
+        sm.MONTH_,
+        SUM(sm.VATMATRAH) as TOTAL_VATMATRAH,
+        SUM(sm.AMOUNT) as TOTAL_AMOUNT,
+        MAX(sm.DATE_) as LAST_DATE
+    FROM StockMovementsCTE sm
+    LEFT JOIN dbo.LG_124_SPECODES sp WITH (NOLOCK) ON sm.SPECODE3 = sp.SPECODE
+    GROUP BY 
+        sm.CLEAN_CODE,
+        sm.NAME,
+        sm.SPECODE3,
+        sp.DEFINITION_,
+        sm.YEAR_,
+        sm.MONTH_
+),
+AggregatedSalesCTE AS (
+    -- Son hesaplamaları yapalım
+    SELECT 
+        CLEAN_CODE,
+        MAX(NAME) as NAME,
+        MAX(SPECODE3) as SPECODE3,
+        MAX(SPECODE_DESC) as SPECODE_DESC,
+        YEAR_,
+        MONTH_,
+        SUM(TOTAL_VATMATRAH) as TOTAL_VATMATRAH,
+        SUM(TOTAL_AMOUNT) as TOTAL_AMOUNT,
+        MAX(LAST_DATE) as LAST_DATE
+    FROM BaseSalesCTE
+    GROUP BY CLEAN_CODE, YEAR_, MONTH_
+)
+SELECT 
+    s24.CLEAN_CODE as CODE,
+    MAX(s24.NAME) as NAME,
+    MAX(s24.SPECODE3) as MOULDCODE,
+    MAX(s24.SPECODE_DESC) as MOULDNAME,
+
+    -- Aylık ortalamalar için tüm aylar
+    MAX(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ = 1 THEN dbo.safeDivide(s24.TOTAL_VATMATRAH, s24.TOTAL_AMOUNT) END) as Jan2024,
+    MAX(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ = 2 THEN dbo.safeDivide(s24.TOTAL_VATMATRAH, s24.TOTAL_AMOUNT) END) as Feb2024,
+    MAX(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ = 3 THEN dbo.safeDivide(s24.TOTAL_VATMATRAH, s24.TOTAL_AMOUNT) END) as Mar2024,
+    MAX(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ = 4 THEN dbo.safeDivide(s24.TOTAL_VATMATRAH, s24.TOTAL_AMOUNT) END) as Apr2024,
+    MAX(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ = 5 THEN dbo.safeDivide(s24.TOTAL_VATMATRAH, s24.TOTAL_AMOUNT) END) as May2024,
+    MAX(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ = 6 THEN dbo.safeDivide(s24.TOTAL_VATMATRAH, s24.TOTAL_AMOUNT) END) as Jun2024,
+    MAX(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ = 7 THEN dbo.safeDivide(s24.TOTAL_VATMATRAH, s24.TOTAL_AMOUNT) END) as Jul2024,
+    MAX(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ = 8 THEN dbo.safeDivide(s24.TOTAL_VATMATRAH, s24.TOTAL_AMOUNT) END) as Aug2024,
+    MAX(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ = 9 THEN dbo.safeDivide(s24.TOTAL_VATMATRAH, s24.TOTAL_AMOUNT) END) as Sep2024,
+    MAX(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ = 10 THEN dbo.safeDivide(s24.TOTAL_VATMATRAH, s24.TOTAL_AMOUNT) END) as Oct2024,
+    MAX(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ = 11 THEN dbo.safeDivide(s24.TOTAL_VATMATRAH, s24.TOTAL_AMOUNT) END) as Nov2024,
+    MAX(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ = 12 THEN dbo.safeDivide(s24.TOTAL_VATMATRAH, s24.TOTAL_AMOUNT) END) as Dec2024,
+    
+    -- Çeyreklik ortalamalar için tüm çeyrekler
+    dbo.safeDivide(
+        SUM(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ IN (1,2,3) THEN s24.TOTAL_VATMATRAH ELSE NULL END),
+        NULLIF(SUM(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ IN (1,2,3) THEN s24.TOTAL_AMOUNT ELSE NULL END), 0)
+    ) as Q1_2024,
+    dbo.safeDivide(
+        SUM(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ IN (4,5,6) THEN s24.TOTAL_VATMATRAH ELSE NULL END),
+        NULLIF(SUM(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ IN (4,5,6) THEN s24.TOTAL_AMOUNT ELSE NULL END), 0)
+    ) as Q2_2024,
+    dbo.safeDivide(
+        SUM(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ IN (7,8,9) THEN s24.TOTAL_VATMATRAH ELSE NULL END),
+        NULLIF(SUM(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ IN (7,8,9) THEN s24.TOTAL_AMOUNT ELSE NULL END), 0)
+    ) as Q3_2024,
+    dbo.safeDivide(
+        SUM(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ IN (10,11,12) THEN s24.TOTAL_VATMATRAH ELSE NULL END),
+        NULLIF(SUM(CASE WHEN s24.YEAR_ = 2024 AND s24.MONTH_ IN (10,11,12) THEN s24.TOTAL_AMOUNT ELSE NULL END), 0)
+    ) as Q4_2024,
+
+    -- Yıllık ortalamalar ve son fiyatlar
+    dbo.safeDivide(
+        SUM(CASE WHEN s24.YEAR_ = 2024 THEN s24.TOTAL_VATMATRAH END),
+        NULLIF(SUM(CASE WHEN s24.YEAR_ = 2024 THEN s24.TOTAL_AMOUNT END), 0)
+    ) as AvgPrice2024,
+    
+    dbo.safeDivide(
+        SUM(CASE WHEN s24.YEAR_ = 2023 THEN s24.TOTAL_VATMATRAH END),
+        NULLIF(SUM(CASE WHEN s24.YEAR_ = 2023 THEN s24.TOTAL_AMOUNT END), 0)
+    ) as AvgPrice2023,
+    
+    dbo.safeDivide(
+        SUM(CASE WHEN s24.YEAR_ = 2022 THEN s24.TOTAL_VATMATRAH END),
+        NULLIF(SUM(CASE WHEN s24.YEAR_ = 2022 THEN s24.TOTAL_AMOUNT END), 0)
+    ) as AvgPrice2022,
+
+    -- Son fiyatlar artık subquery yerine window function ile
+    MAX(CASE WHEN s24.YEAR_ = 2024 THEN dbo.safeDivide(s24.TOTAL_VATMATRAH, s24.TOTAL_AMOUNT) END) as LastPrice2024,
+    MAX(CASE WHEN s24.YEAR_ = 2023 THEN dbo.safeDivide(s24.TOTAL_VATMATRAH, s24.TOTAL_AMOUNT) END) as LastPrice2023,
+    MAX(CASE WHEN s24.YEAR_ = 2022 THEN dbo.safeDivide(s24.TOTAL_VATMATRAH, s24.TOTAL_AMOUNT) END) as LastPrice2022,
+
+    -- Last yearly average price (cascading)
+    COALESCE(
+        NULLIF(dbo.safeDivide(
+            SUM(CASE WHEN s24.YEAR_ = 2024 THEN s24.TOTAL_VATMATRAH END),
+            NULLIF(SUM(CASE WHEN s24.YEAR_ = 2024 THEN s24.TOTAL_AMOUNT END), 0)
+        ), 0),
+        NULLIF(dbo.safeDivide(
+            SUM(CASE WHEN s24.YEAR_ = 2023 THEN s24.TOTAL_VATMATRAH END),
+            NULLIF(SUM(CASE WHEN s24.YEAR_ = 2023 THEN s24.TOTAL_AMOUNT END), 0)
+        ), 0),
+        NULLIF(dbo.safeDivide(
+            SUM(CASE WHEN s24.YEAR_ = 2022 THEN s24.TOTAL_VATMATRAH END),
+            NULLIF(SUM(CASE WHEN s24.YEAR_ = 2022 THEN s24.TOTAL_AMOUNT END), 0)
+        ), 0)
+    ) AS LastYearlyAvgPrice
+
+FROM AggregatedSalesCTE s24
+WHERE EXISTS (
+    SELECT 1 FROM AggregatedSalesCTE s2 
+    WHERE s2.CLEAN_CODE = s24.CLEAN_CODE 
+    AND s2.YEAR_ = 2024
+)
+GROUP BY s24.CLEAN_CODE;
