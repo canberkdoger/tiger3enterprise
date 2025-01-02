@@ -1,0 +1,62 @@
+SELECT        CASE WHEN IT.CODE LIKE '\%' THEN SUBSTRING(IT.CODE, 2, LEN(IT.CODE) - 1) ELSE IT.CODE END AS CODE, MAX(IT.NAME) AS NAME, MAX(IT.SPECODE) AS SPECODE, MONTH(ST.DATE_) AS MONTH_, YEAR(ST.DATE_) 
+                         AS YEAR_, ST.PRICE, ROW_NUMBER() OVER (PARTITION BY CASE WHEN IT.CODE LIKE '\%' THEN SUBSTRING(IT.CODE, 2, LEN(IT.CODE) - 1) ELSE IT.CODE END, MONTH(ST.DATE_)
+ORDER BY ST.DATE_ DESC) AS RowNum
+FROM            dbo.LG_124_01_STLINE ST LEFT JOIN
+                         dbo.LG_124_ITEMS IT ON ST.STOCKREF = IT.LOGICALREF LEFT JOIN
+                         dbo.LG_124_01_INVOICE IV ON ST.INVOICEREF = IV.LOGICALREF
+WHERE        IV.TRCODE = 1 AND IT.CARDTYPE = 10 AND IV.GRPCODE = 1 AND YEAR(ST.DATE_) = 2024
+GROUP BY CASE WHEN IT.CODE LIKE '\%' THEN SUBSTRING(IT.CODE, 2, LEN(IT.CODE) - 1) ELSE IT.CODE END, MONTH(ST.DATE_), YEAR(ST.DATE_), ST.PRICE, ST.DATE_), /* 2023 VERİLERİ*/ Sales2023 AS
+    (SELECT        CASE WHEN IT.CODE LIKE '\%' THEN SUBSTRING(IT.CODE, 2, LEN(IT.CODE) - 1) ELSE IT.CODE END AS CODE, AVG(ST.PRICE) AS AvgPrice2023, MAX(ST.DATE_) AS LastDate2023,
+                                    (SELECT        TOP 1 ST2.PRICE
+                                      FROM            dbo.LG_122_01_STLINE ST2 LEFT JOIN
+                                                                dbo.LG_122_01_INVOICE IV2 ON ST2.INVOICEREF = IV2.LOGICALREF LEFT JOIN
+                                                                dbo.LG_124_ITEMS IT2 ON ST2.STOCKREF = IT2.LOGICALREF
+                                      WHERE        (ST2.STOCKREF = IT.LOGICALREF OR
+                                                                (CASE WHEN IT2.CODE LIKE '\%' THEN SUBSTRING(IT2.CODE, 2, LEN(IT2.CODE) - 1) ELSE IT2.CODE END = CASE WHEN IT.CODE LIKE '\%' THEN SUBSTRING(IT.CODE, 2, LEN(IT.CODE) - 1) 
+                                                                ELSE IT.CODE END)) AND IV2.TRCODE = 1 AND YEAR(ST2.DATE_) = 2023
+                                      ORDER BY ST2.DATE_ DESC) AS LastPrice2023
+      FROM            dbo.LG_122_01_STLINE ST LEFT JOIN
+                                dbo.LG_124_ITEMS IT ON ST.STOCKREF = IT.LOGICALREF LEFT JOIN
+                                dbo.LG_122_01_INVOICE IV ON ST.INVOICEREF = IV.LOGICALREF
+      WHERE        IV.TRCODE = 1 AND IT.CARDTYPE = 10 AND IV.GRPCODE = 1 AND YEAR(ST.DATE_) = 2023
+      GROUP BY CASE WHEN IT.CODE LIKE '\%' THEN SUBSTRING(IT.CODE, 2, LEN(IT.CODE) - 1) ELSE IT.CODE END, IT.LOGICALREF), /* 2022 VERİLERİ*/ Sales2022 AS
+    (SELECT        CASE WHEN IT.CODE LIKE '\%' THEN SUBSTRING(IT.CODE, 2, LEN(IT.CODE) - 1) ELSE IT.CODE END AS CODE, AVG(ST.PRICE) AS AvgPrice2022, MAX(ST.DATE_) AS LastDate2022,
+                                    (SELECT        TOP 1 ST2.PRICE
+                                      FROM            dbo.LG_122_01_STLINE ST2 LEFT JOIN
+                                                                dbo.LG_122_01_INVOICE IV2 ON ST2.INVOICEREF = IV2.LOGICALREF LEFT JOIN
+                                                                dbo.LG_124_ITEMS IT2 ON ST2.STOCKREF = IT2.LOGICALREF
+                                      WHERE        (ST2.STOCKREF = IT.LOGICALREF OR
+                                                                (CASE WHEN IT2.CODE LIKE '\%' THEN SUBSTRING(IT2.CODE, 2, LEN(IT2.CODE) - 1) ELSE IT2.CODE END = CASE WHEN IT.CODE LIKE '\%' THEN SUBSTRING(IT.CODE, 2, LEN(IT.CODE) - 1) 
+                                                                ELSE IT.CODE END)) AND IV2.TRCODE = 1 AND YEAR(ST2.DATE_) = 2022
+                                      ORDER BY ST2.DATE_ DESC) AS LastPrice2022
+      FROM            dbo.LG_122_01_STLINE ST LEFT JOIN
+                                dbo.LG_124_ITEMS IT ON ST.STOCKREF = IT.LOGICALREF LEFT JOIN
+                                dbo.LG_122_01_INVOICE IV ON ST.INVOICEREF = IV.LOGICALREF
+      WHERE        IV.TRCODE = 1 AND IT.CARDTYPE = 10 AND IV.GRPCODE = 1 AND YEAR(ST.DATE_) = 2022
+      GROUP BY CASE WHEN IT.CODE LIKE '\%' THEN SUBSTRING(IT.CODE, 2, LEN(IT.CODE) - 1) ELSE IT.CODE END, IT.LOGICALREF)
+    /* FİNAL SORGU*/ SELECT M.CODE, MAX(M.NAME) AS NAME, MAX(M.SPECODE) AS SPECODE, /* 2024 AYLIK SON FİYAT*/ COALESCE (NULLIF (CAST(MAX(CASE WHEN M.MONTH_ = 1 THEN M.PRICE END) AS VARCHAR(20)), '0'), 'NONE') 
+                              AS Jan2024, COALESCE (NULLIF (CAST(MAX(CASE WHEN M.MONTH_ = 2 THEN M.PRICE END) AS VARCHAR(20)), '0'), 'NONE') AS Feb2024, COALESCE (NULLIF (CAST(MAX(CASE WHEN M.MONTH_ = 3 THEN M.PRICE END) 
+                              AS VARCHAR(20)), '0'), 'NONE') AS Mar2024, COALESCE (NULLIF (CAST(MAX(CASE WHEN M.MONTH_ = 4 THEN M.PRICE END) AS VARCHAR(20)), '0'), 'NONE') AS Apr2024, 
+                              COALESCE (NULLIF (CAST(MAX(CASE WHEN M.MONTH_ = 5 THEN M.PRICE END) AS VARCHAR(20)), '0'), 'NONE') AS May2024, COALESCE (NULLIF (CAST(MAX(CASE WHEN M.MONTH_ = 6 THEN M.PRICE END) 
+                              AS VARCHAR(20)), '0'), 'NONE') AS Jun2024, COALESCE (NULLIF (CAST(MAX(CASE WHEN M.MONTH_ = 7 THEN M.PRICE END) AS VARCHAR(20)), '0'), 'NONE') AS Jul2024, 
+                              COALESCE (NULLIF (CAST(MAX(CASE WHEN M.MONTH_ = 8 THEN M.PRICE END) AS VARCHAR(20)), '0'), 'NONE') AS Aug2024, COALESCE (NULLIF (CAST(MAX(CASE WHEN M.MONTH_ = 9 THEN M.PRICE END) 
+                              AS VARCHAR(20)), '0'), 'NONE') AS Sep2024, COALESCE (NULLIF (CAST(MAX(CASE WHEN M.MONTH_ = 10 THEN M.PRICE END) AS VARCHAR(20)), '0'), 'NONE') AS Oct2024, 
+                              COALESCE (NULLIF (CAST(MAX(CASE WHEN M.MONTH_ = 11 THEN M.PRICE END) AS VARCHAR(20)), '0'), 'NONE') AS Nov2024, COALESCE (NULLIF (CAST(MAX(CASE WHEN M.MONTH_ = 12 THEN M.PRICE END) 
+                              AS VARCHAR(20)), '0'), 'NONE') AS Dec2024, /* 2024 ÇEYREK ORTALAMALARI*/ COALESCE (NULLIF (CAST(AVG(CASE WHEN M.MONTH_ IN (1, 2, 3) THEN M.PRICE END) AS VARCHAR(20)), '0'), 'NONE') AS Q1_2024, 
+                              COALESCE (NULLIF (CAST(AVG(CASE WHEN M.MONTH_ IN (4, 5, 6) THEN M.PRICE END) AS VARCHAR(20)), '0'), 'NONE') AS Q2_2024, COALESCE (NULLIF (CAST(AVG(CASE WHEN M.MONTH_ IN (7, 8, 9) THEN M.PRICE END) 
+                              AS VARCHAR(20)), '0'), 'NONE') AS Q3_2024, COALESCE (NULLIF (CAST(AVG(CASE WHEN M.MONTH_ IN (10, 11, 12) THEN M.PRICE END) AS VARCHAR(20)), '0'), 'NONE') AS Q4_2024, 
+                              /* 2024 GENEL ORTALAMA*/ COALESCE (NULLIF (CAST(AVG(M.PRICE) AS VARCHAR(20)), '0'), 'NONE') AS AvgPrice2024, /* 2024 SON FİYAT*/ COALESCE (NULLIF (CAST
+                                  ((SELECT        TOP 1 ST.PRICE
+                                      FROM            dbo.LG_124_01_STLINE ST LEFT JOIN
+                                                               dbo.LG_124_ITEMS IT ON ST.STOCKREF = IT.LOGICALREF LEFT JOIN
+                                                               dbo.LG_124_01_INVOICE IV ON ST.INVOICEREF = IV.LOGICALREF
+                                      WHERE        IV.TRCODE = 1 AND IT.CARDTYPE = 10 AND IV.GRPCODE = 1 AND YEAR(ST.DATE_) = 2024 AND (CASE WHEN IT.CODE LIKE '\%' THEN SUBSTRING(IT.CODE, 2, LEN(IT.CODE) - 1) ELSE IT.CODE END) 
+                                                               = M.CODE
+                                      ORDER BY ST.DATE_ DESC) AS VARCHAR(20)), '0'), 'NONE') AS LastPrice2024, /* 2023 VERİLERİ*/ COALESCE (NULLIF (CAST(MAX(S2023.AvgPrice2023) AS VARCHAR(20)), '0'), 'NONE') AS AvgPrice2023, 
+                              COALESCE (NULLIF (CAST(MAX(S2023.LastPrice2023) AS VARCHAR(20)), '0'), 'NONE') AS LastPrice2023, /* 2022 VERİLERİ*/ COALESCE (NULLIF (CAST(MAX(S2022.AvgPrice2022) AS VARCHAR(20)), '0'), 'NONE') 
+                              AS AvgPrice2022, COALESCE (NULLIF (CAST(MAX(S2022.LastPrice2022) AS VARCHAR(20)), '0'), 'NONE') AS LastPrice2022
+     FROM            MonthlyLastSale2024 M LEFT JOIN
+                              Sales2023 S2023 ON M.CODE = S2023.CODE LEFT JOIN
+                              Sales2022 S2022 ON M.CODE = S2022.CODE
+     WHERE        M.RowNum = 1
+     /* HER AYIN SON FİYATINI ALMASI İÇİN*/ GROUP BY M.CODE;
