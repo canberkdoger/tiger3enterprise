@@ -1,0 +1,482 @@
+WITH ItemsLatest AS (
+    SELECT 
+        i.LOGICALREF,
+        i.CODE as ITEMCODE,
+        i.NAME as ITEMNAME,
+        i.SPECODE,
+        i.SPECODE3,
+        i.CARDTYPE,
+        ROW_NUMBER() OVER (PARTITION BY i.LOGICALREF ORDER BY i.TableVer) AS rn
+    FROM (
+        SELECT 
+            LOGICALREF, CODE, NAME, SPECODE, SPECODE3, CARDTYPE,
+            1 as TableVer 
+        FROM LG_125_ITEMS
+        WHERE CODE IS NOT NULL AND CODE != ''
+        
+        UNION ALL
+        
+        SELECT 
+            LOGICALREF, CODE, NAME, SPECODE, SPECODE3, CARDTYPE,
+            2 as TableVer
+        FROM LG_124_ITEMS
+        WHERE CODE IS NOT NULL AND CODE != ''
+        
+        UNION ALL
+        
+        SELECT 
+            LOGICALREF, CODE, NAME, SPECODE, SPECODE3, CARDTYPE,
+            3 as TableVer
+        FROM LG_122_ITEMS
+        WHERE CODE IS NOT NULL AND CODE != ''
+    ) i
+),
+UnitsLatest AS (
+    SELECT 
+        u.ITEMREF,
+        u.LINENR,
+        u.WEIGHT,
+        TableVer,
+        ROW_NUMBER() OVER (PARTITION BY u.ITEMREF, u.LINENR ORDER BY TableVer) AS rn
+    FROM (
+        SELECT 
+            ITEMREF, LINENR, WEIGHT,
+            1 as TableVer
+        FROM LG_125_ITMUNITA
+        UNION ALL
+        SELECT 
+            ITEMREF, LINENR, WEIGHT,
+            2 as TableVer
+        FROM LG_124_ITMUNITA
+    ) u
+),
+SpecodesLatest AS (
+    SELECT 
+        s.SPECODE,
+        s.DEFINITION_ as SPECODE_DESC,
+        TableVer,
+        ROW_NUMBER() OVER (PARTITION BY s.SPECODE ORDER BY TableVer) AS rn
+    FROM (
+        SELECT 
+            SPECODE, DEFINITION_,
+            1 as TableVer
+        FROM LG_125_SPECODES
+        UNION ALL
+        SELECT 
+            SPECODE, DEFINITION_,
+            2 as TableVer
+        FROM LG_124_SPECODES
+    ) s
+)
+
+SELECT * FROM (
+    -- 2022 verileri
+    SELECT  
+        STLINE.DATE_ AS [FATURA TARİHİ],
+        INVOICE.FICHENO [FATURA NO], 
+        CLIENT.CODE AS [CARİ KODU], 
+        CLIENT.DEFINITION_ AS [CARİ], 
+COALESCE(
+    CASE 
+        WHEN STLINE.TRCODE IN (9) THEN 
+            REPLACE((SELECT TOP 1 CODE FROM LG_125_SRVCARD WHERE LOGICALREF = STLINE.STOCKREF), '\', '')
+        ELSE 
+            COALESCE(
+                REPLACE(ITEMS.ITEMCODE, '\', ''),
+                REPLACE((SELECT TOP 1 CODE FROM LG_125_ITEMS WHERE LOGICALREF = STLINE.STOCKREF), '\', ''),
+                REPLACE((SELECT TOP 1 CODE FROM LG_124_ITEMS WHERE LOGICALREF = STLINE.STOCKREF), '\', ''),
+                REPLACE((SELECT TOP 1 CODE FROM LG_122_ITEMS WHERE LOGICALREF = STLINE.STOCKREF), '\', ''),
+                ''
+            )
+    END,
+    ''
+) AS [MALZEME KODU],
+COALESCE(
+    CASE 
+        WHEN STLINE.TRCODE IN (9) THEN 
+            (SELECT TOP 1 DEFINITION_ FROM LG_125_SRVCARD WHERE LOGICALREF = STLINE.STOCKREF)
+        ELSE 
+            COALESCE(
+                ITEMS.ITEMNAME,
+                (SELECT TOP 1 NAME FROM LG_125_ITEMS WHERE LOGICALREF = STLINE.STOCKREF),
+                (SELECT TOP 1 NAME FROM LG_124_ITEMS WHERE LOGICALREF = STLINE.STOCKREF),
+                (SELECT TOP 1 NAME FROM LG_122_ITEMS WHERE LOGICALREF = STLINE.STOCKREF),
+                ''
+            )
+    END,
+    ''
+) AS [MALZEME ADI],
+
+        ITEMS.SPECODE3 AS [KALIP KODU],
+        SPECODES.SPECODE_DESC AS [KALIP ADI],
+        CASE STLINE.TRCODE 
+            WHEN 1 THEN 'MAL ALIM'
+            WHEN 2 THEN 'PERAKENDE İADE'
+            WHEN 3 THEN 'TOPTAN SATIŞ'
+            WHEN 4 THEN 'ALINAN HİZMET'
+            WHEN 5 THEN 'ALINAN PROFORMA'
+            WHEN 6 THEN 'ALIM İADE'
+            WHEN 7 THEN 'PERAKENDE SATIŞ'
+            WHEN 8 THEN 'TOPTAN SATIŞ'
+            WHEN 9 THEN 'VERİLEN HİZMET'
+            WHEN 10 THEN 'VERİLEN PROFORMA'
+            WHEN 13 THEN 'ALINAN FİYAT FARKI'
+            WHEN 14 THEN 'VERİLEN FİYAT FARKI'
+            WHEN 26 THEN 'MÜSTAHSİL MAKBUZU'
+        END AS [FATURA TÜRÜ],
+                CASE WHEN STLINE.TRCODE IN (7, 8) THEN 'SATIŞ'
+             WHEN STLINE.TRCODE IN (3) THEN 'İADE'
+             ELSE '-' 
+        END AS [İŞLEM TÜRÜ],
+        CASE ITEMS.CARDTYPE
+            WHEN 1 THEN 'Ticari mal'
+            WHEN 2 THEN 'Karma koli'
+            WHEN 3 THEN 'Depozitolu mal'
+            WHEN 4 THEN 'Sabit kıymet'
+            WHEN 10 THEN 'Hammadde'
+            WHEN 11 THEN 'Yarımamul'
+            WHEN 12 THEN 'Mamul'
+            WHEN 13 THEN 'Tükletim malı'
+            WHEN 20 THEN 'M.sınıfı (genel)'
+            WHEN 21 THEN 'M.sınıfı (tablolu)'
+        END AS [MALZEME TÜRÜ],
+        [dbo].[safeDivide](STLINE.VATMATRAH, STLINE.AMOUNT) [FİYAT TL], 
+        [dbo].[safeDivide]([dbo].[safeDivide](STLINE.VATMATRAH, STLINE.AMOUNT), STLINE.REPORTRATE) [FİYAT EUR], 
+        CASE WHEN STLINE.TRCODE IN (7, 8, 9, 13, 14) THEN STLINE.AMOUNT 
+             WHEN STLINE.TRCODE IN (3) THEN 0 - STLINE.AMOUNT 
+             ELSE '0' 
+        END AS AMOUNT, 
+        CASE 
+            WHEN ITEMS.SPECODE = 'hm' THEN STLINE.AMOUNT
+            ELSE ISNULL(UNITS.WEIGHT / 1000.0, 0)
+        END AS [BİRİM KG],
+        CASE 
+            WHEN ITEMS.SPECODE = 'hm' OR ITEMS.CARDTYPE = 13 THEN 
+                CASE WHEN STLINE.TRCODE IN (7, 8) THEN STLINE.AMOUNT
+                     WHEN STLINE.TRCODE IN (3) THEN -STLINE.AMOUNT
+                     ELSE 0 
+                END
+            ELSE 
+                CASE WHEN STLINE.TRCODE IN (7, 8) THEN ISNULL((UNITS.WEIGHT / 1000.0) * STLINE.AMOUNT, 0)
+                     WHEN STLINE.TRCODE IN (3) THEN -ISNULL((UNITS.WEIGHT / 1000.0) * STLINE.AMOUNT, 0)
+                     ELSE 0 
+                END
+        END AS [TOPLAM KG],
+        STLINE.REPORTRATE AS [TR/EUR KUR], 
+CASE WHEN STLINE.TRCODE IN (7, 8, 9, 13, 14) THEN STLINE.VATMATRAH 
+     WHEN STLINE.TRCODE IN (3) THEN -STLINE.VATMATRAH 
+     ELSE '0' 
+END AS [TOPLAM TL],
+
+CASE WHEN STLINE.TRCODE IN (7, 8, 9, 13, 14) THEN [dbo].[safeDivide](STLINE.VATMATRAH, STLINE.REPORTRATE)
+     WHEN STLINE.TRCODE IN (3) THEN -[dbo].[safeDivide](STLINE.VATMATRAH, STLINE.REPORTRATE)
+     ELSE '0' 
+END AS [TOPLAM EURO],
+        CASE STLINE.TRCURR 
+            WHEN 0 THEN 'TL' 
+            WHEN 160 THEN 'TL' 
+            WHEN 1 THEN 'USD' 
+            WHEN 17 THEN 'GBP' 
+            WHEN 20 THEN 'EUR' 
+            ELSE 'DİĞER' 
+END [FATURA DÖVİZİ],
+MUHACC.CODE as [MUHASEBE KODU],
+MUHACC.DEFINITION_ as [MK AÇIKLAMASI],
+DATEADD(DAY, CAST(ISNULL(PAYPLANS.DEFINITION2, '1') AS INT), STLINE.DATE_) AS [FATURA VADESİ]
+    FROM LG_122_01_STLINE STLINE(NOLOCK) 
+    INNER JOIN LG_122_01_INVOICE INVOICE(NOLOCK) 
+        ON STLINE.INVOICEREF = INVOICE.LOGICALREF 
+    INNER JOIN LG_122_CLCARD CLIENT(NOLOCK) 
+        ON STLINE.CLIENTREF = CLIENT.LOGICALREF 
+    LEFT JOIN LG_122_PAYPLANS PAYPLANS(NOLOCK) 
+        ON PAYPLANS.LOGICALREF = INVOICE.PAYDEFREF
+    LEFT JOIN ItemsLatest ITEMS
+        ON STLINE.STOCKREF = ITEMS.LOGICALREF 
+        AND ITEMS.rn = 1
+    LEFT JOIN UnitsLatest UNITS
+        ON ITEMS.LOGICALREF = UNITS.ITEMREF 
+        AND UNITS.LINENR = 1
+        AND UNITS.rn = 1
+    LEFT JOIN SpecodesLatest SPECODES
+        ON ITEMS.SPECODE3 = SPECODES.SPECODE
+        AND SPECODES.rn = 1
+
+        LEFT JOIN LG_125_EMUHACC MUHACC(NOLOCK)
+    ON STLINE.ACCOUNTREF = MUHACC.LOGICALREF
+    WHERE (STLINE.TRCODE IN (3, 7, 8, 9, 14)) 
+    AND (STLINE.CANCELLED = 0)
+
+    UNION ALL
+    -- 2024 verileri için aynı sorgu (sadece LG_125_* tabloları kullanılacak)
+    SELECT  
+        STLINE.DATE_ AS [FATURA TARİHİ],
+        INVOICE.FICHENO [FATURA NO], 
+        CLIENT.CODE AS [CARİ KODU], 
+        CLIENT.DEFINITION_ AS [CARİ], 
+COALESCE(
+    CASE 
+        WHEN STLINE.TRCODE IN (9) THEN 
+            REPLACE((SELECT TOP 1 CODE FROM LG_125_SRVCARD WHERE LOGICALREF = STLINE.STOCKREF), '\', '')
+        ELSE 
+            COALESCE(
+                REPLACE(ITEMS.ITEMCODE, '\', ''),
+                REPLACE((SELECT TOP 1 CODE FROM LG_125_ITEMS WHERE LOGICALREF = STLINE.STOCKREF), '\', ''),
+                REPLACE((SELECT TOP 1 CODE FROM LG_124_ITEMS WHERE LOGICALREF = STLINE.STOCKREF), '\', ''),
+                REPLACE((SELECT TOP 1 CODE FROM LG_122_ITEMS WHERE LOGICALREF = STLINE.STOCKREF), '\', ''),
+                ''
+            )
+    END,
+    ''
+) AS [MALZEME KODU],
+COALESCE(
+    CASE 
+        WHEN STLINE.TRCODE IN (9) THEN 
+            (SELECT TOP 1 DEFINITION_ FROM LG_125_SRVCARD WHERE LOGICALREF = STLINE.STOCKREF)
+        ELSE 
+            COALESCE(
+                ITEMS.ITEMNAME,
+                (SELECT TOP 1 NAME FROM LG_125_ITEMS WHERE LOGICALREF = STLINE.STOCKREF),
+                (SELECT TOP 1 NAME FROM LG_124_ITEMS WHERE LOGICALREF = STLINE.STOCKREF),
+                (SELECT TOP 1 NAME FROM LG_122_ITEMS WHERE LOGICALREF = STLINE.STOCKREF),
+                ''
+            )
+    END,
+    ''
+) AS [MALZEME ADI],
+
+        ITEMS.SPECODE3 AS [KALIP KODU],
+        SPECODES.SPECODE_DESC AS [KALIP ADI],
+        CASE STLINE.TRCODE 
+            WHEN 1 THEN 'MAL ALIM'
+            WHEN 2 THEN 'PERAKENDE İADE'
+            WHEN 3 THEN 'TOPTAN SATIŞ'
+            WHEN 4 THEN 'ALINAN HİZMET'
+            WHEN 5 THEN 'ALINAN PROFORMA'
+            WHEN 6 THEN 'ALIM İADE'
+            WHEN 7 THEN 'PERAKENDE SATIŞ'
+            WHEN 8 THEN 'TOPTAN SATIŞ'
+            WHEN 9 THEN 'VERİLEN HİZMET'
+            WHEN 10 THEN 'VERİLEN PROFORMA'
+            WHEN 13 THEN 'ALINAN FİYAT FARKI'
+            WHEN 14 THEN 'VERİLEN FİYAT FARKI'
+            WHEN 26 THEN 'MÜSTAHSİL MAKBUZU'
+        END AS [FATURA TÜRÜ],
+                CASE WHEN STLINE.TRCODE IN (7, 8) THEN 'SATIŞ'
+             WHEN STLINE.TRCODE IN (3) THEN 'İADE'
+             ELSE '-' 
+        END AS [İŞLEM TÜRÜ],
+        CASE ITEMS.CARDTYPE
+            WHEN 1 THEN 'Ticari mal'
+            WHEN 2 THEN 'Karma koli'
+            WHEN 3 THEN 'Depozitolu mal'
+            WHEN 4 THEN 'Sabit kıymet'
+            WHEN 10 THEN 'Hammadde'
+            WHEN 11 THEN 'Yarımamul'
+            WHEN 12 THEN 'Mamul'
+            WHEN 13 THEN 'Tükletim malı'
+            WHEN 20 THEN 'M.sınıfı (genel)'
+            WHEN 21 THEN 'M.sınıfı (tablolu)'
+        END AS [MALZEME TÜRÜ],
+        [dbo].[safeDivide](STLINE.VATMATRAH, STLINE.AMOUNT) [FİYAT TL], 
+        [dbo].[safeDivide]([dbo].[safeDivide](STLINE.VATMATRAH, STLINE.AMOUNT), STLINE.REPORTRATE) [FİYAT EUR], 
+        CASE WHEN STLINE.TRCODE IN (7, 8, 9, 13, 14) THEN STLINE.AMOUNT 
+             WHEN STLINE.TRCODE IN (3) THEN 0 - STLINE.AMOUNT 
+             ELSE '0' 
+        END AS AMOUNT, 
+        CASE 
+            WHEN ITEMS.SPECODE = 'hm' THEN STLINE.AMOUNT
+            ELSE ISNULL(UNITS.WEIGHT / 1000.0, 0)
+        END AS [BİRİM KG],
+        CASE 
+            WHEN ITEMS.SPECODE = 'hm' OR ITEMS.CARDTYPE = 13 THEN 
+                CASE WHEN STLINE.TRCODE IN (7, 8) THEN STLINE.AMOUNT
+                     WHEN STLINE.TRCODE IN (3) THEN -STLINE.AMOUNT
+                     ELSE 0 
+                END
+            ELSE 
+                CASE WHEN STLINE.TRCODE IN (7, 8) THEN ISNULL((UNITS.WEIGHT / 1000.0) * STLINE.AMOUNT, 0)
+                     WHEN STLINE.TRCODE IN (3) THEN -ISNULL((UNITS.WEIGHT / 1000.0) * STLINE.AMOUNT, 0)
+                     ELSE 0 
+                END
+        END AS [TOPLAM KG],
+        STLINE.REPORTRATE AS [TR/EUR KUR], 
+CASE WHEN STLINE.TRCODE IN (7, 8, 9, 13, 14) THEN STLINE.VATMATRAH 
+     WHEN STLINE.TRCODE IN (3) THEN -STLINE.VATMATRAH 
+     ELSE '0' 
+END AS [TOPLAM TL],
+
+CASE WHEN STLINE.TRCODE IN (7, 8, 9, 13, 14) THEN [dbo].[safeDivide](STLINE.VATMATRAH, STLINE.REPORTRATE)
+     WHEN STLINE.TRCODE IN (3) THEN -[dbo].[safeDivide](STLINE.VATMATRAH, STLINE.REPORTRATE)
+     ELSE '0' 
+END AS [TOPLAM EURO],
+        CASE STLINE.TRCURR 
+            WHEN 0 THEN 'TL' 
+            WHEN 160 THEN 'TL' 
+            WHEN 1 THEN 'USD' 
+            WHEN 17 THEN 'GBP' 
+            WHEN 20 THEN 'EUR' 
+            ELSE 'DİĞER' 
+END [FATURA DÖVİZİ],
+MUHACC.CODE as [MUHASEBE KODU],
+MUHACC.DEFINITION_ as [MK AÇIKLAMASI],
+DATEADD(DAY, CAST(ISNULL(PAYPLANS.DEFINITION2, '1') AS INT), STLINE.DATE_) AS [FATURA VADESİ]
+    FROM LG_124_01_STLINE STLINE(NOLOCK) 
+    INNER JOIN LG_124_01_INVOICE INVOICE(NOLOCK) 
+        ON STLINE.INVOICEREF = INVOICE.LOGICALREF 
+    INNER JOIN LG_124_CLCARD CLIENT(NOLOCK) 
+        ON STLINE.CLIENTREF = CLIENT.LOGICALREF 
+    LEFT JOIN LG_124_PAYPLANS PAYPLANS(NOLOCK) 
+        ON PAYPLANS.LOGICALREF = INVOICE.PAYDEFREF
+    LEFT JOIN ItemsLatest ITEMS
+        ON STLINE.STOCKREF = ITEMS.LOGICALREF 
+        AND ITEMS.rn = 1
+    LEFT JOIN UnitsLatest UNITS
+        ON ITEMS.LOGICALREF = UNITS.ITEMREF 
+        AND UNITS.LINENR = 1
+        AND UNITS.rn = 1
+    LEFT JOIN SpecodesLatest SPECODES
+        ON ITEMS.SPECODE3 = SPECODES.SPECODE
+        AND SPECODES.rn = 1
+ LEFT JOIN LG_125_EMUHACC MUHACC(NOLOCK)
+    ON STLINE.ACCOUNTREF = MUHACC.LOGICALREF       
+    WHERE (STLINE.TRCODE IN (3, 7, 8, 9, 14)) 
+    AND (STLINE.CANCELLED = 0)
+
+    UNION ALL
+
+    -- 2025 verileri için aynı sorgu (sadece LG_125_* tabloları kullanılacak)
+    SELECT  
+        STLINE.DATE_ AS [FATURA TARİHİ],
+        INVOICE.FICHENO [FATURA NO], 
+        CLIENT.CODE AS [CARİ KODU], 
+        CLIENT.DEFINITION_ AS [CARİ], 
+COALESCE(
+    CASE 
+        WHEN STLINE.TRCODE IN (9) THEN 
+            REPLACE((SELECT TOP 1 CODE FROM LG_125_SRVCARD WHERE LOGICALREF = STLINE.STOCKREF), '\', '')
+        ELSE 
+            COALESCE(
+                REPLACE(ITEMS.ITEMCODE, '\', ''),
+                REPLACE((SELECT TOP 1 CODE FROM LG_125_ITEMS WHERE LOGICALREF = STLINE.STOCKREF), '\', ''),
+                REPLACE((SELECT TOP 1 CODE FROM LG_124_ITEMS WHERE LOGICALREF = STLINE.STOCKREF), '\', ''),
+                REPLACE((SELECT TOP 1 CODE FROM LG_122_ITEMS WHERE LOGICALREF = STLINE.STOCKREF), '\', ''),
+                ''
+            )
+    END,
+    ''
+) AS [MALZEME KODU],
+COALESCE(
+    CASE 
+        WHEN STLINE.TRCODE IN (9) THEN 
+            (SELECT TOP 1 DEFINITION_ FROM LG_125_SRVCARD WHERE LOGICALREF = STLINE.STOCKREF)
+        ELSE 
+            COALESCE(
+                ITEMS.ITEMNAME,
+                (SELECT TOP 1 NAME FROM LG_125_ITEMS WHERE LOGICALREF = STLINE.STOCKREF),
+                (SELECT TOP 1 NAME FROM LG_124_ITEMS WHERE LOGICALREF = STLINE.STOCKREF),
+                (SELECT TOP 1 NAME FROM LG_122_ITEMS WHERE LOGICALREF = STLINE.STOCKREF),
+                ''
+            )
+    END,
+    ''
+) AS [MALZEME ADI],
+
+        ITEMS.SPECODE3 AS [KALIP KODU],
+        SPECODES.SPECODE_DESC AS [KALIP ADI],
+        CASE STLINE.TRCODE 
+            WHEN 1 THEN 'MAL ALIM'
+            WHEN 2 THEN 'PERAKENDE İADE'
+            WHEN 3 THEN 'TOPTAN SATIŞ'
+            WHEN 4 THEN 'ALINAN HİZMET'
+            WHEN 5 THEN 'ALINAN PROFORMA'
+            WHEN 6 THEN 'ALIM İADE'
+            WHEN 7 THEN 'PERAKENDE SATIŞ'
+            WHEN 8 THEN 'TOPTAN SATIŞ'
+            WHEN 9 THEN 'VERİLEN HİZMET'
+            WHEN 10 THEN 'VERİLEN PROFORMA'
+            WHEN 13 THEN 'ALINAN FİYAT FARKI'
+            WHEN 14 THEN 'VERİLEN FİYAT FARKI'
+            WHEN 26 THEN 'MÜSTAHSİL MAKBUZU'
+        END AS [FATURA TÜRÜ],
+                CASE WHEN STLINE.TRCODE IN (7, 8) THEN 'SATIŞ'
+             WHEN STLINE.TRCODE IN (3) THEN 'İADE'
+             ELSE '-' 
+        END AS [İŞLEM TÜRÜ],
+        CASE ITEMS.CARDTYPE
+            WHEN 1 THEN 'Ticari mal'
+            WHEN 2 THEN 'Karma koli'
+            WHEN 3 THEN 'Depozitolu mal'
+            WHEN 4 THEN 'Sabit kıymet'
+            WHEN 10 THEN 'Hammadde'
+            WHEN 11 THEN 'Yarımamul'
+            WHEN 12 THEN 'Mamul'
+            WHEN 13 THEN 'Tükletim malı'
+            WHEN 20 THEN 'M.sınıfı (genel)'
+            WHEN 21 THEN 'M.sınıfı (tablolu)'
+        END AS [MALZEME TÜRÜ],
+        [dbo].[safeDivide](STLINE.VATMATRAH, STLINE.AMOUNT) [FİYAT TL], 
+        [dbo].[safeDivide]([dbo].[safeDivide](STLINE.VATMATRAH, STLINE.AMOUNT), STLINE.REPORTRATE) [FİYAT EUR], 
+        CASE WHEN STLINE.TRCODE IN (7, 8, 9, 13, 14) THEN STLINE.AMOUNT 
+             WHEN STLINE.TRCODE IN (3) THEN 0 - STLINE.AMOUNT 
+             ELSE '0' 
+        END AS AMOUNT, 
+        CASE 
+            WHEN ITEMS.SPECODE = 'hm' THEN STLINE.AMOUNT
+            ELSE ISNULL(UNITS.WEIGHT / 1000.0, 0)
+        END AS [BİRİM KG],
+        CASE 
+            WHEN ITEMS.SPECODE = 'hm' OR ITEMS.CARDTYPE = 13 THEN 
+                CASE WHEN STLINE.TRCODE IN (7, 8) THEN STLINE.AMOUNT
+                     WHEN STLINE.TRCODE IN (3) THEN -STLINE.AMOUNT
+                     ELSE 0 
+                END
+            ELSE 
+                CASE WHEN STLINE.TRCODE IN (7, 8) THEN ISNULL((UNITS.WEIGHT / 1000.0) * STLINE.AMOUNT, 0)
+                     WHEN STLINE.TRCODE IN (3) THEN -ISNULL((UNITS.WEIGHT / 1000.0) * STLINE.AMOUNT, 0)
+                     ELSE 0 
+                END
+        END AS [TOPLAM KG],
+        STLINE.REPORTRATE AS [TR/EUR KUR], 
+CASE WHEN STLINE.TRCODE IN (7, 8, 9, 13, 14) THEN STLINE.VATMATRAH 
+     WHEN STLINE.TRCODE IN (3) THEN -STLINE.VATMATRAH 
+     ELSE '0' 
+END AS [TOPLAM TL],
+
+CASE WHEN STLINE.TRCODE IN (7, 8, 9, 13, 14) THEN [dbo].[safeDivide](STLINE.VATMATRAH, STLINE.REPORTRATE)
+     WHEN STLINE.TRCODE IN (3) THEN -[dbo].[safeDivide](STLINE.VATMATRAH, STLINE.REPORTRATE)
+     ELSE '0' 
+END AS [TOPLAM EURO],
+        CASE STLINE.TRCURR 
+            WHEN 0 THEN 'TL' 
+            WHEN 160 THEN 'TL' 
+            WHEN 1 THEN 'USD' 
+            WHEN 17 THEN 'GBP' 
+            WHEN 20 THEN 'EUR' 
+            ELSE 'DİĞER' 
+END [FATURA DÖVİZİ],
+MUHACC.CODE as [MUHASEBE KODU],
+MUHACC.DEFINITION_ as [MK AÇIKLAMASI],
+DATEADD(DAY, CAST(ISNULL(PAYPLANS.DEFINITION2, '1') AS INT), STLINE.DATE_) AS [FATURA VADESİ]
+FROM LG_125_01_STLINE STLINE(NOLOCK) 
+INNER JOIN LG_125_01_INVOICE INVOICE(NOLOCK) 
+    ON STLINE.INVOICEREF = INVOICE.LOGICALREF 
+INNER JOIN LG_125_CLCARD CLIENT(NOLOCK) 
+    ON STLINE.CLIENTREF = CLIENT.LOGICALREF 
+LEFT JOIN LG_125_PAYPLANS PAYPLANS(NOLOCK) 
+    ON PAYPLANS.LOGICALREF = INVOICE.PAYDEFREF
+LEFT JOIN ItemsLatest ITEMS
+    ON STLINE.STOCKREF = ITEMS.LOGICALREF 
+    AND ITEMS.rn = 1
+LEFT JOIN UnitsLatest UNITS
+    ON ITEMS.LOGICALREF = UNITS.ITEMREF 
+    AND UNITS.LINENR = 1
+    AND UNITS.rn = 1
+LEFT JOIN SpecodesLatest SPECODES
+    ON ITEMS.SPECODE3 = SPECODES.SPECODE
+    AND SPECODES.rn = 1
+LEFT JOIN LG_125_EMUHACC MUHACC(NOLOCK)
+    ON STLINE.ACCOUNTREF = MUHACC.LOGICALREF
+WHERE (STLINE.TRCODE IN (3, 7, 8, 9, 14)) 
+AND (STLINE.CANCELLED = 0)
+
+) AS CombinedData
