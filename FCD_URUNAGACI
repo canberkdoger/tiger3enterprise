@@ -1,0 +1,21 @@
+SELECT        dbo.LG_125_ITEMS.CODE AS [MALZEME KODU], 
+             dbo.LG_125_ITEMS.NAME AS [MALZEME ADI], 
+             dbo.LG_125_BOMASTER.CODE AS [ÜRÜN REÇETESİ KODU], 
+             dbo.LG_125_BOMASTER.NAME AS [Ü. REÇETESİ AÇIKLAMASI], 
+             LG_125_ITEMS_1.CODE AS [HAMMADDE KODU], 
+             LG_125_ITEMS_1.NAME AS [HAMMADDE ADI], 
+             CASE WHEN dbo.LG_125_UNITSETL.NAME = 'GR' 
+                  THEN dbo.LG_125_BOMLINE.AMOUNT / 1000 
+                  ELSE dbo.LG_125_BOMLINE.AMOUNT 
+             END AS MİKTAR, 
+             CASE WHEN dbo.LG_125_UNITSETL.NAME = 'GR' 
+                  THEN 'kilogram' 
+                  ELSE dbo.LG_125_UNITSETL.NAME 
+             END AS BİRİM
+FROM            dbo.LG_125_UNITSETL INNER JOIN
+                         dbo.LG_125_BOMLINE ON dbo.LG_125_UNITSETL.LOGICALREF = dbo.LG_125_BOMLINE.UOMREF INNER JOIN
+                         dbo.LG_125_ITEMS AS LG_125_ITEMS_1 ON dbo.LG_125_BOMLINE.ITEMREF = LG_125_ITEMS_1.LOGICALREF INNER JOIN
+                         dbo.LG_125_ITEMS INNER JOIN
+                         dbo.FCD_AGAC_REF ON dbo.LG_125_ITEMS.LOGICALREF = dbo.FCD_AGAC_REF.ITEMREF INNER JOIN
+                         dbo.LG_125_BOMASTER ON dbo.FCD_AGAC_REF.BOMREF = dbo.LG_125_BOMASTER.LOGICALREF ON dbo.LG_125_BOMLINE.BOMMASTERREF = dbo.LG_125_BOMASTER.LOGICALREF
+WHERE        (LG_125_ITEMS_1.CARDTYPE = 10) AND dbo.LG_125_ITEMS.CODE NOT LIKE '\%'
