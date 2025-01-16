@@ -1,11 +1,33 @@
-SELECT        dbo.LG_125_OPERTION.CODE AS [Operasyon Kodu], dbo.LG_125_ITEMS.CODE AS [Ürün Kodu], dbo.LG_125_ITEMS.NAME AS [Ürün Adı], dbo.LG_125_OPERTION.NAME AS [Ürün Kalıbı], 
-                         dbo.LG_125_WORKSTAT.CODE AS [İş İstasyonu Kodu], dbo.LG_125_WORKSTAT.NAME AS [İş İstasyonu Adı], dbo.LG_INTTOTIME(dbo.LG_125_OPRTREQ.RUNTIME) AS [İşlem Süresi], 
-                         dbo.LG_125_OPRTREQ.BATCHQUANTITY AS [Göz Sayısı]
-FROM            dbo.LG_125_OPERTION INNER JOIN
-                         dbo.LG_125_OPRTREQ ON dbo.LG_125_OPERTION.LOGICALREF = dbo.LG_125_OPRTREQ.OPERATIONREF INNER JOIN
-                         dbo.LG_125_BOMASTER ON dbo.LG_125_OPERTION.CODE = dbo.LG_125_BOMASTER.NAME INNER JOIN
-                         dbo.LG_125_ITEMS ON dbo.LG_125_BOMASTER.MAINPRODREF = dbo.LG_125_ITEMS.LOGICALREF INNER JOIN
-                         dbo.LG_125_WSGRPF ON dbo.LG_125_OPERTION.CODE = dbo.LG_125_WSGRPF.CODE INNER JOIN
-                         dbo.LG_125_WSGRPASS ON dbo.LG_125_WSGRPF.LOGICALREF = dbo.LG_125_WSGRPASS.WSGRPREF INNER JOIN
-                         dbo.LG_125_WORKSTAT ON dbo.LG_125_WSGRPASS.WSREF = dbo.LG_125_WORKSTAT.LOGICALREF
-WHERE dbo.LG_125_ITEMS.CODE NOT LIKE '\%'
+-- Ürün ve operasyon bilgilerini getiren view sorgusu
+SELECT  
+    dbo.LG_125_OPERTION.CODE AS [Operasyon Kodu],
+    dbo.LG_125_ITEMS.CODE AS [Ürün Kodu],
+    dbo.LG_125_ITEMS.NAME AS [Ürün Adı],
+    dbo.LG_125_OPERTION.NAME AS [Ürün Kalıbı],
+    dbo.LG_125_WORKSTAT.CODE AS [İş İstasyonu Kodu],
+    dbo.LG_125_WORKSTAT.NAME AS [İş İstasyonu Adı],
+    dbo.LG_INTTOTIME(dbo.LG_125_OPRTREQ.RUNTIME) AS [İşlem Süresi],
+    dbo.LG_125_OPRTREQ.BATCHQUANTITY AS [Göz Sayısı]
+FROM 
+    dbo.LG_125_OPERTION
+    -- Operasyon gereksinimleri tablosu ile birleştirme
+    INNER JOIN dbo.LG_125_OPRTREQ 
+        ON dbo.LG_125_OPERTION.LOGICALREF = dbo.LG_125_OPRTREQ.OPERATIONREF 
+    -- Ana üretim bilgileri ile birleştirme
+    INNER JOIN dbo.LG_125_BOMASTER 
+        ON dbo.LG_125_OPERTION.CODE = dbo.LG_125_BOMASTER.NAME 
+    -- Ürün bilgileri ile birleştirme
+    INNER JOIN dbo.LG_125_ITEMS 
+        ON dbo.LG_125_BOMASTER.MAINPRODREF = dbo.LG_125_ITEMS.LOGICALREF 
+    -- İş istasyonu grup tanımları ile birleştirme
+    INNER JOIN dbo.LG_125_WSGRPF 
+        ON dbo.LG_125_OPERTION.CODE = dbo.LG_125_WSGRPF.CODE 
+    -- İş istasyonu grup atamaları ile birleştirme
+    INNER JOIN dbo.LG_125_WSGRPASS 
+        ON dbo.LG_125_WSGRPF.LOGICALREF = dbo.LG_125_WSGRPASS.WSGRPREF 
+    -- İş istasyonu bilgileri ile birleştirme
+    INNER JOIN dbo.LG_125_WORKSTAT 
+        ON dbo.LG_125_WSGRPASS.WSREF = dbo.LG_125_WORKSTAT.LOGICALREF
+-- Eski malzeme kodlarını çıkartma
+WHERE 
+    dbo.LG_125_ITEMS.CODE NOT LIKE '\%'

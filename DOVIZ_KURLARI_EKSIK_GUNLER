@@ -1,0 +1,46 @@
+-- 2021 yılı içindeki tüm günleri içeren bir dizi oluşturma
+WITH AllDates AS (
+    SELECT Date = DATEADD(DAY, Number, '2021-01-01')
+    FROM master..spt_values
+    WHERE Type = 'P' 
+      AND Number <= DATEDIFF(DAY, '2021-01-01', '2021-12-31')
+)
+SELECT AD.Date
+FROM AllDates AD
+LEFT JOIN ExchangeRates ER ON ER.Date = AD.Date
+WHERE ER.Date IS NULL
+ORDER BY AD.Date;
+
+--AYRI SORGU**********************************************
+
+-- Eksik günleri en yakın önceki dolu günlerle doldurmak
+WITH AllDates AS (
+    SELECT Date = DATEADD(DAY, Number, '2021-01-01')
+    FROM master..spt_values
+    WHERE Type = 'P' 
+      AND Number <= DATEDIFF(DAY, '2021-01-01', '2021-12-31')
+),
+MissingDates AS (
+    SELECT AD.Date
+    FROM AllDates AD
+    LEFT JOIN ExchangeRates ER ON ER.Date = AD.Date
+    WHERE ER.Date IS NULL
+),
+PreviousRates AS (
+    SELECT 
+        MD.Date,
+        ER.CurrencyCode,
+        ER.ForexBuying,
+        ER.ForexSelling
+    FROM 
+        MissingDates MD
+    CROSS APPLY (
+        SELECT TOP 1 ER.CurrencyCode, ER.ForexBuying, ER.ForexSelling
+        FROM ExchangeRates ER
+        WHERE ER.Date < MD.Date
+        ORDER BY ER.Date DESC
+    ) AS ER
+)
+INSERT INTO ExchangeRates (Date, CurrencyCode, ForexBuying, ForexSelling)
+SELECT Date, CurrencyCode, ForexBuying, ForexSelling
+FROM PreviousRates;

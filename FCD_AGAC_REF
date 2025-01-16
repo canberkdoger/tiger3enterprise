@@ -1,0 +1,7 @@
+SELECT DISTINCT S.LOGICALREF, S.ITEMREF, S.BOMREF, dbo.LG_125_ITEMS.CODE
+FROM            dbo.LG_125_ITMBOMAS AS S INNER JOIN
+                         dbo.LG_125_ITEMS ON S.ITEMREF = dbo.LG_125_ITEMS.LOGICALREF
+WHERE        (S.LOGICALREF =
+                             (SELECT        MIN(LOGICALREF) AS TEST
+                               FROM            dbo.LG_125_ITMBOMAS
+                               WHERE        (ITEMREF = S.ITEMREF)))

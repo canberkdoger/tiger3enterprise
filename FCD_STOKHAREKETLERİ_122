@@ -1,0 +1,97 @@
+SELECT        
+    CASE STFICHE.SOURCEINDEX 
+        WHEN 0 THEN 'B. Merkez' 
+        WHEN 1 THEN 'B. Üretim' 
+        WHEN 2 THEN 'B. İade Ambarı' 
+        WHEN 3 THEN 'B. Karantina Depo' 
+        WHEN 4 THEN 'Erport Antrepo' 
+        WHEN 5 THEN 'Goker Antrepo' 
+        WHEN 6 THEN 'Aktas Paketleme' 
+        WHEN 7 THEN 'S. Merkez' 
+        WHEN 8 THEN 'S. Üretim' 
+        WHEN 9 THEN 'B. Giriş Kalite Kontrol' 
+        WHEN 10 THEN 'S. Giriş Kalite Kontrol' 
+        WHEN 11 THEN 'S. İade Ambarı' 
+        WHEN 13 THEN 'S. Karantina Depo' 
+        WHEN 14 THEN 'B.Teknik Malzeme' 
+        WHEN 15 THEN 'S.Teknik Malzeme' 
+        WHEN 50 THEN 'YOLDA' 
+        WHEN 100 THEN 'LIZ PAKETLEME' 
+        WHEN 101 THEN 'DAV MAKİNE' 
+        WHEN 102 THEN 'Hurda' 
+        ELSE 'Bilinmeyen Ambar' 
+    END AS [Ambar Adı],
+    CASE 
+        WHEN LEFT(ITEMS.CODE, 1) = '\' THEN SUBSTRING(ITEMS.CODE, 2, LEN(ITEMS.CODE) - 1) 
+        ELSE ITEMS.CODE 
+    END AS [Malzeme Kodu], 
+    ITEMS.NAME AS [Malzeme Adı], 
+    ITEMS.SPECODE AS [Özel Kod], 
+    ITEMS.SPECODE3 AS [Özel Kod 3], 
+    SPECODES.DEFINITION_ AS [Özel Kod 3 Açıklaması], 
+    STLINE.DATE_ AS Tarih, 
+    dbo.LG_INTTOTIME(STLINE.FTIME) AS Saat, 
+    CASE STFICHE.TRCODE 
+        WHEN 1 THEN 'Mal alım irsaliyesi' 
+        WHEN 2 THEN 'Per. sat. iade irs.' 
+        WHEN 3 THEN 'Topt.sat. iade irs.' 
+        WHEN 4 THEN 'Kons. çıkış iade irs.' 
+        WHEN 5 THEN 'Konsinye giriş irs.' 
+        WHEN 6 THEN 'Alım iade irs.' 
+        WHEN 7 THEN 'Perakende satış irs.' 
+        WHEN 8 THEN 'Toptan satış irs.' 
+        WHEN 9 THEN 'Konsinye çıkış irs.' 
+        WHEN 10 THEN 'Konsinye giriş iade irs.' 
+        WHEN 11 THEN 'Fire fişi' 
+        WHEN 12 THEN 'Sarf fişi' 
+        WHEN 13 THEN 'üretimden giriş fişi' 
+        WHEN 14 THEN 'Devir fişi' 
+        WHEN 25 THEN 'Ambar fişi' 
+        WHEN 26 THEN 'Mustahsil irs.' 
+        WHEN 50 THEN 'Sayım Fazlası Fişi' 
+        WHEN 51 THEN 'Sayım Eksiği Fişi' 
+        ELSE 'Bilinmeyen Hareket Türü' 
+    END AS [Hareket Türü], 
+    CASE STFICHE.PRODSTAT 
+        WHEN 0 THEN 'Güncel' 
+        WHEN 1 THEN 'Planlanan' 
+        ELSE 'Belirsiz' 
+    END AS Durumu, 
+    CASE STFICHE.CANCELLED 
+        WHEN 0 THEN 'Aktif' 
+        WHEN 1 THEN 'İptal Edilmiş' 
+        ELSE 'Belirsiz' 
+    END AS [İptal Durumu], 
+    STLINE.AMOUNT AS Miktar, 
+    CASE 
+        WHEN STFICHE.TRCODE = 3 THEN -1 * [dbo].[safeDivide](STLINE.VATMATRAH, STLINE.AMOUNT)
+        ELSE [dbo].[safeDivide](STLINE.VATMATRAH, STLINE.AMOUNT)
+    END AS [Fiyat TL],
+    CASE 
+        WHEN STFICHE.TRCODE = 3 THEN -1 * [dbo].[safeDivide]([dbo].[safeDivide](STLINE.VATMATRAH, STLINE.AMOUNT), STFICHE.REPORTRATE)
+        ELSE [dbo].[safeDivide]([dbo].[safeDivide](STLINE.VATMATRAH, STLINE.AMOUNT), STFICHE.REPORTRATE)
+    END AS [Fiyat EUR],
+    CASE 
+        WHEN STFICHE.TRCODE = 3 THEN -1 * STLINE.VATMATRAH
+        ELSE STLINE.VATMATRAH
+    END AS [Toplam TL],
+    CASE 
+        WHEN STFICHE.TRCODE = 3 THEN -1 * [dbo].[safeDivide](STLINE.VATMATRAH, STFICHE.REPORTRATE)
+        ELSE [dbo].[safeDivide](STLINE.VATMATRAH, STFICHE.REPORTRATE)
+    END AS [Toplam EUR],
+    STFICHE.REPORTRATE AS Kur,
+    STFICHE.FICHENO AS [Fiş No]
+FROM            
+    dbo.LG_122_01_STLINE AS STLINE 
+LEFT OUTER JOIN
+    dbo.LG_122_ITEMS AS ITEMS ON STLINE.STOCKREF = ITEMS.LOGICALREF 
+LEFT OUTER JOIN
+    dbo.LG_122_01_STFICHE AS STFICHE ON STLINE.STFICHEREF = STFICHE.LOGICALREF 
+LEFT OUTER JOIN
+    dbo.LG_122_SPECODES AS SPECODES ON ITEMS.SPECODE3 = SPECODES.SPECODE AND SPECODES.SPECODETYPE = 1
+WHERE        
+    (YEAR(STLINE.DATE_) IN (2022, 2023)) 
+    AND (STFICHE.FICHENO IS NOT NULL) 
+    AND (STFICHE.SOURCEINDEX IS NOT NULL) 
+    AND (STFICHE.TRCODE IS NOT NULL) 
+    AND (ITEMS.CODE IS NOT NULL)

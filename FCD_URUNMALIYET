@@ -1,0 +1,20 @@
+WITH GozSayilari AS (SELECT        BL2.BOMMASTERREF, BL2.AMOUNT AS GOZ_SAYISI
+                                                FROM            dbo.LG_125_BOMLINE AS BL2 INNER JOIN
+                                                                         dbo.LG_125_ITEMS AS i2 ON BL2.ITEMREF = i2.LOGICALREF
+                                                WHERE        (i2.SPECODE = 's'))
+    SELECT        TOP (100) PERCENT i.CODE AS [MALZEME KODU], i.NAME AS [MALZEME ADI], bm.CODE AS [ÜRÜN REÇETESİ KODU], bm.NAME AS [Ü. REÇETESİ AÇIKLAMASI], i2.CODE AS [HAMMADDE KODU], 
+                              i2.SPECODE AS [HAMMADDE ÖZEL KODU], i2.NAME AS [HAMMADDE ADI], CASE WHEN ul.NAME = 'GR' THEN bl.AMOUNT / 1000 ELSE bl.AMOUNT END AS [TOPLAM MİKTAR], gz.GOZ_SAYISI AS [GÖZ SAYISI], 
+                              CASE WHEN ul.NAME = 'GR' THEN (bl.AMOUNT / NULLIF (gz.GOZ_SAYISI, 0)) / 1000 ELSE (bl.AMOUNT / NULLIF (gz.GOZ_SAYISI, 0)) END AS [TEKLİ MİKTAR], 
+                              CASE WHEN ul.NAME = 'GR' THEN 'kilogram' ELSE ul.NAME END AS BİRİM, fsa.LastYearlyAvgPrice, fsa.LastPrice, fsa.LastPrice * CASE WHEN ul.NAME = 'GR' THEN (bl.AMOUNT / NULLIF (gz.GOZ_SAYISI, 0)) 
+                              / 1000 ELSE (bl.AMOUNT / NULLIF (gz.GOZ_SAYISI, 0)) END AS [SON SATINALMA TOPLAM MALİYETİ], fsa.LastYearlyAvgPrice * CASE WHEN ul.NAME = 'GR' THEN (bl.AMOUNT / NULLIF (gz.GOZ_SAYISI, 0)) 
+                              / 1000 ELSE (bl.AMOUNT / NULLIF (gz.GOZ_SAYISI, 0)) END AS [SON YIL ORTALAMA SATINALMA TOPLAM MALİYETİ]
+     FROM            dbo.LG_125_ITEMS AS i INNER JOIN
+                              dbo.LG_125_ITMBOMAS AS im ON i.LOGICALREF = im.ITEMREF INNER JOIN
+                              dbo.LG_125_BOMASTER AS bm ON im.BOMREF = bm.LOGICALREF INNER JOIN
+                              dbo.LG_125_BOMLINE AS bl ON bm.LOGICALREF = bl.BOMMASTERREF INNER JOIN
+                              dbo.LG_125_ITEMS AS i2 ON bl.ITEMREF = i2.LOGICALREF INNER JOIN
+                              dbo.LG_125_UNITSETL AS ul ON bl.UOMREF = ul.LOGICALREF LEFT OUTER JOIN
+                              dbo.FCD_FIYATLARSATINALMA AS fsa ON i2.CODE = fsa.CODE LEFT OUTER JOIN
+                              GozSayilari AS gz ON bm.LOGICALREF = gz.BOMMASTERREF
+     WHERE        (i.CODE NOT LIKE '\%') AND (i2.SPECODE NOT IN ('s'))
+     ORDER BY [MALZEME KODU], [ÜRÜN REÇETESİ KODU], [HAMMADDE KODU]

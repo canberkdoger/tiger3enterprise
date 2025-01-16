@@ -1,0 +1,100 @@
+-- Hammadde stok miktar ve fiyat bilgilerini getiren view sorgusu
+
+-- Malzeme referanslarını getiren CTE
+WITH ItemLogicalRefsCTE AS (
+    SELECT DISTINCT
+        CASE 
+            WHEN I.CODE LIKE '\%' THEN SUBSTRING(I.CODE, 2, LEN(I.CODE) - 1) 
+            ELSE I.CODE 
+        END AS CODE,
+        I.LOGICALREF
+    FROM 
+        dbo.LG_125_ITEMS I
+    WHERE 
+        I.CARDTYPE = 10
+),
+
+-- Son hareket tarihlerini getiren CTE
+LastMovementDateCTE AS (
+    SELECT 
+        i.CODE, 
+        MAX(AllMoves.DATE_) as LAST_DATE
+    FROM 
+        ItemLogicalRefsCTE i
+        INNER JOIN (
+            -- Stok hareketlerini birleştiren alt sorgu
+            SELECT 
+                s1.STOCKREF, 
+                s1.DATE_ 
+            FROM 
+                dbo.LG_125_01_STLINE s1 
+            WHERE 
+                s1.TRCODE IN (1,8,12,13) 
+                AND s1.LINETYPE = 0 
+            
+            UNION ALL
+            
+            SELECT 
+                s2.STOCKREF, 
+                s2.DATE_ 
+            FROM 
+                dbo.LG_124_01_STLINE s2
+            WHERE 
+                s2.TRCODE IN (1,8,12,13) 
+                AND s2.LINETYPE = 0
+            
+            UNION ALL
+            
+            SELECT 
+                s3.STOCKREF, 
+                s3.DATE_ 
+            FROM 
+                dbo.LG_122_01_STLINE s3
+            WHERE 
+                s3.TRCODE IN (1,8,12,13) 
+                AND s3.LINETYPE = 0
+        ) AS AllMoves 
+            ON AllMoves.STOCKREF = i.LOGICALREF
+    GROUP BY 
+        i.CODE
+)
+
+-- Ana sorgu
+SELECT  
+    I.CODE AS [MALZEME KODU], 
+    I.NAME AS [MALZEME ADI], 
+    I.SPECODE AS [ÖZEL KOD], 
+    SUM(CASE WHEN ST.INVENNO = -1 THEN ST.ONHAND ELSE 0 END) AS [TOPLAM MİKTAR],
+    lmd.LAST_DATE AS [SON HAREKET TARİHİ],
+    dbo.FCD_FIYATLARSATINALMA.LastPrice AS [SON FİYAT], 
+    SUM(CASE WHEN ST.INVENNO = -1 THEN ST.ONHAND ELSE 0 END) * dbo.FCD_FIYATLARSATINALMA.LastPrice AS [SON FİYAT TUTAR],
+    dbo.FCD_FIYATLARSATINALMA.AvgPrice2025 AS [2025 ORT. FİYAT], 
+    SUM(CASE WHEN ST.INVENNO = -1 THEN ST.ONHAND ELSE 0 END) * dbo.FCD_FIYATLARSATINALMA.AvgPrice2025 AS [2025 ORT. TUTAR],
+    dbo.FCD_FIYATLARSATINALMA.LastYearlyAvgPrice AS [SON YIL ORT. FİYAT],
+    SUM(CASE WHEN ST.INVENNO = -1 THEN ST.ONHAND ELSE 0 END) * dbo.FCD_FIYATLARSATINALMA.LastYearlyAvgPrice AS [SON YIL ORT. TUTAR]
+FROM    
+    dbo.LG_125_ITEMS AS I 
+    -- Fiyat bilgileri ile birleştirme
+    INNER JOIN dbo.FCD_FIYATLARSATINALMA 
+        ON I.CODE = dbo.FCD_FIYATLARSATINALMA.CODE 
+    -- Stok toplam bilgileri ile birleştirme
+    LEFT OUTER JOIN dbo.LV_125_01_STINVTOT AS ST 
+        ON I.LOGICALREF = ST.STOCKREF 
+    -- Son hareket tarihleri ile birleştirme
+    LEFT JOIN LastMovementDateCTE lmd 
+        ON I.CODE = lmd.CODE
+WHERE   
+    I.CARDTYPE = 10 
+    AND ST.INVENNO <= 15
+GROUP BY 
+    I.CODE, 
+    I.NAME, 
+    I.SPECODE, 
+    I.LOGICALREF,
+    lmd.LAST_DATE, 
+    dbo.FCD_FIYATLARSATINALMA.AvgPrice2025, 
+    dbo.FCD_FIYATLARSATINALMA.LastPrice, 
+    dbo.FCD_FIYATLARSATINALMA.LastYearlyAvgPrice
+-- Sadece stok miktarı olan kayıtları getir
+HAVING  
+    SUM(CASE WHEN ST.INVENNO = -1 THEN ST.ONHAND ELSE 0 END) > 0

@@ -1,0 +1,9 @@
+WITH MaliyetToplam AS (SELECT        [MALZEME KODU], [MALZEME ADI], [ÜRÜN REÇETESİ KODU], [Ü. REÇETESİ AÇIKLAMASI], SUM([SON SATINALMA TOPLAM MALİYETİ]) AS [SON SATINALMA TOPLAM MALİYETİ], 
+                                                                                SUM([SON YIL ORTALAMA SATINALMA TOPLAM MALİYETİ]) AS [SON YIL ORTALAMA SATINALMA TOPLAM MALİYETİ]
+                                                       FROM            dbo.FCD_URUNMALIYET AS um
+                                                       GROUP BY [MALZEME KODU], [MALZEME ADI], [ÜRÜN REÇETESİ KODU], [Ü. REÇETESİ AÇIKLAMASI])
+    SELECT        TOP (100) PERCENT mt.[MALZEME KODU], mt.[MALZEME ADI], mt.[ÜRÜN REÇETESİ KODU], mt.[Ü. REÇETESİ AÇIKLAMASI], mt.[SON SATINALMA TOPLAM MALİYETİ], mt.[SON YIL ORTALAMA SATINALMA TOPLAM MALİYETİ], 
+                              fs.LastPrice AS [SON SATIŞ FİYATI], fs.LastYearlyAvgPrice AS [SON YIL ORTALAMA SATIŞ FİYATI]
+     FROM            MaliyetToplam AS mt LEFT OUTER JOIN
+                              dbo.FCD_FIYATLARSATIS AS fs ON mt.[MALZEME KODU] = fs.CODE
+     ORDER BY mt.[MALZEME KODU], mt.[ÜRÜN REÇETESİ KODU]

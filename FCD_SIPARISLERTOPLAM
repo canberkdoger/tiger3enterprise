@@ -1,27 +1,47 @@
-SELECT        i.CODE AS [ÜRÜN KODU], i.NAME AS [ÜRÜN ADI], i.SPECODE3 AS [KALIP KODU], sp.DEFINITION_ AS [KALIP ADI], 
-                         SUM(ISNULL(orf.AMOUNT, 0)) AS MİKTAR, SUM(ISNULL(orf.SHIPPEDAMOUNT, 0)) AS [SEVKEDİLEN MİKTAR], SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) 
-                         AS [KALAN MİKTAR], ISNULL(dm.[TOPLAM MİKTAR], 0) AS STOK, 
-                         ISNULL(ue.[ÜRETİLECEK MİKTAR], 0) - (SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0)) AS [NET İHTİYAÇ], 
-                         SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0) AS [ÜRETİLECEK MİKTAR], 
-                         ISNULL(ue.[ÜRETİLECEK MİKTAR], 0) AS [AÇIK İŞ EMRİ], SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) 
-                         - ISNULL(dm.[TOPLAM MİKTAR], 0) - ISNULL(ue.[ÜRETİLECEK MİKTAR], 0) AS [GEREKEN İŞ EMRİ], ISNULL(mb.[Koli İçi Adet], 0) AS KOLİ, 
+SELECT        i.CODE AS [ÜRÜN KODU], i.NAME AS [ÜRÜN ADI], i.SPECODE3 AS [KALIP KODU], sp.DEFINITION_ AS [KALIP ADI], SUM(ISNULL(orf.AMOUNT, 0)) AS MİKTAR, SUM(ISNULL(orf.SHIPPEDAMOUNT, 0)) AS [SEVKEDİLEN MİKTAR], 
+                         SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) AS [KALAN MİKTAR], ISNULL(dm.[TOPLAM MİKTAR], 0) AS STOK, ISNULL(ue.[ÜRETİLECEK MİKTAR], 0) - (SUM(ISNULL(orf.AMOUNT, 0) 
+                         - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0)) AS [NET İHTİYAÇ], 
+                         CASE 
+                             WHEN (SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0)) < 0 THEN 0 
+                             ELSE (SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0))
+                         END AS [ÜRETİLECEK MİKTAR],
+                         ISNULL(ue.[ÜRETİLECEK MİKTAR], 0) AS [AÇIK İŞ EMRİ], 
+                         CASE 
+                             WHEN (SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0) - ISNULL(ue.[ÜRETİLECEK MİKTAR], 0)) < 0 THEN 0
+                             ELSE (SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0) - ISNULL(ue.[ÜRETİLECEK MİKTAR], 0))
+                         END AS [GEREKEN İŞ EMRİ], 
+                         ISNULL(mb.[Koli İçi Adet], 0) AS KOLİ, 
                          ISNULL(mb.[Palet İçi Adet], 0) AS PALET, 
-                         CEILING(CAST((SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0)) AS float) 
-                         / NULLIF(ISNULL(mb.[Koli İçi Adet], 0), 0)) AS [GEREKEN KOLİ SAYISI],
-                         CEILING(CAST((SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0)) AS float) 
-                         / NULLIF(ISNULL(mb.[Palet İçi Adet], 0), 0)) AS [GEREKEN PALET SAYISI],
-                         SUM(ISNULL(orf.TOTAL, 0)) AS [TL TOPLAM], SUM(ISNULL(orf.PRICE, 0) / NULLIF (ISNULL(orfh.REPORTRATE, 0), 0) 
-                         * ISNULL(orf.AMOUNT, 0)) AS [EURO TOPLAM], SUM((ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) * ISNULL(orf.PRICE, 0)) AS [FATURA EDİLMEMİŞ TL], 
-                         SUM((ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) * ISNULL(orf.PRICE, 0) / NULLIF (ISNULL(orfh.REPORTRATE, 0), 0)) AS [FATURA EDİLMEMİŞ EURO], 
-                         ISNULL(mb.[Net Ağırlık], 0) / 1000.0 AS [Birim Ağırlık KG], (SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0)) 
-                         * ISNULL(mb.[Net Ağırlık], 0) / 1000.0 AS [ÜRETİLECEK KG]
-FROM            dbo.LG_125_01_ORFLINE orf
-                         LEFT JOIN dbo.LG_125_ITEMS i ON i.LOGICALREF = orf.STOCKREF
-                         LEFT JOIN dbo.LG_125_SPECODES sp ON i.SPECODE3 = sp.SPECODE
-                         LEFT JOIN dbo.LG_125_01_ORFICHE orfh ON orf.ORDFICHEREF = orfh.LOGICALREF
-                         LEFT JOIN dbo.FCD_DEPOMIKTARMAMUL dm ON i.CODE = dm.[MALZEME KODU]
-                         LEFT JOIN dbo.FCD_URETIMEMIRLERI_TOPLAM ue ON i.CODE = ue.[MALZEME KODU]
-                         LEFT JOIN dbo.FCD_MALZEMEBIRIMLER mb ON i.CODE = mb.[Ürün Kodu]
+                         CASE 
+                             WHEN CEILING(CAST(SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0) AS float) / NULLIF(ISNULL(mb.[Koli İçi Adet], 0), 0)) < 0 THEN 0
+                             ELSE CEILING(CAST(SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0) AS float) / NULLIF(ISNULL(mb.[Koli İçi Adet], 0), 0))
+                         END AS [GEREKEN KOLİ SAYISI], 
+                         CASE 
+                             WHEN CEILING(CAST(SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0) AS float) / NULLIF(ISNULL(mb.[Palet İçi Adet], 0), 0)) < 0 THEN 0
+                             ELSE CEILING(CAST(SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0) AS float) / NULLIF(ISNULL(mb.[Palet İçi Adet], 0), 0))
+                         END AS [GEREKEN PALET SAYISI], 
+                         SUM(ISNULL(orf.TOTAL, 0)) AS [TL TOPLAM], 
+                         SUM(ISNULL(orf.PRICE, 0) / NULLIF(ISNULL(orfh.REPORTRATE, 0), 0) * ISNULL(orf.AMOUNT, 0)) AS [EURO TOPLAM], 
+                         CASE 
+                             WHEN SUM((ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) * ISNULL(orf.PRICE, 0)) < 0 THEN 0
+                             ELSE SUM((ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) * ISNULL(orf.PRICE, 0))
+                         END AS [FATURA EDİLMEMİŞ TL], 
+                         CASE 
+                             WHEN SUM((ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) * ISNULL(orf.PRICE, 0) / NULLIF(ISNULL(orfh.REPORTRATE, 0), 0)) < 0 THEN 0
+                             ELSE SUM((ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) * ISNULL(orf.PRICE, 0) / NULLIF(ISNULL(orfh.REPORTRATE, 0), 0))
+                         END AS [FATURA EDİLMEMİŞ EURO], 
+                         ISNULL(mb.[Net Ağırlık], 0) / 1000.0 AS [Birim Ağırlık KG], 
+                         CASE 
+                             WHEN ((SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0)) * ISNULL(mb.[Net Ağırlık], 0) / 1000.0) < 0 THEN 0
+                             ELSE ((SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) - ISNULL(dm.[TOPLAM MİKTAR], 0)) * ISNULL(mb.[Net Ağırlık], 0) / 1000.0)
+                         END AS [ÜRETİLECEK KG]
+FROM            dbo.LG_125_01_ORFLINE AS orf LEFT OUTER JOIN
+                         dbo.LG_125_ITEMS AS i ON i.LOGICALREF = orf.STOCKREF LEFT OUTER JOIN
+                         dbo.LG_125_SPECODES AS sp ON i.SPECODE3 = sp.SPECODE LEFT OUTER JOIN
+                         dbo.LG_125_01_ORFICHE AS orfh ON orf.ORDFICHEREF = orfh.LOGICALREF LEFT OUTER JOIN
+                         dbo.FCD_DEPOMIKTARMAMUL AS dm ON i.CODE = dm.[MALZEME KODU] LEFT OUTER JOIN
+                         dbo.FCD_URETIMEMIRLERI_TOPLAM AS ue ON i.CODE = ue.[MALZEME KODU] LEFT OUTER JOIN
+                         dbo.FCD_MALZEMEBIRIMLER AS mb ON i.CODE = mb.[Ürün Kodu]
 WHERE        (i.CARDTYPE = 12) AND (orf.CLOSED = 0) AND (orf.TRCODE = 1)
-GROUP BY i.SPECODE3, sp.DEFINITION_, i.CODE, i.NAME, ISNULL(dm.[TOPLAM MİKTAR], 0), 
-                         ISNULL(ue.[ÜRETİLECEK MİKTAR], 0), ISNULL(mb.[Net Ağırlık], 0), ISNULL(mb.[Koli İçi Adet], 0), ISNULL(mb.[Palet İçi Adet], 0)
+GROUP BY i.SPECODE3, sp.DEFINITION_, i.CODE, i.NAME, ISNULL(dm.[TOPLAM MİKTAR], 0), ISNULL(ue.[ÜRETİLECEK MİKTAR], 0), ISNULL(mb.[Net Ağırlık], 0), ISNULL(mb.[Koli İçi Adet], 0), ISNULL(mb.[Palet İçi Adet], 0)
+HAVING SUM(ISNULL(orf.AMOUNT, 0) - ISNULL(orf.SHIPPEDAMOUNT, 0)) > 0
